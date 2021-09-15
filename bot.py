@@ -1,4 +1,5 @@
 import asyncio
+from typing import final
 import webbrowser
 import re
 from time import sleep
@@ -24,7 +25,7 @@ def alert(content):
     try:
         search_and_open_ldlc(content)
     except Exception as e:
-        print(e)
+        print("{}: {}".format(type(e), e))
 
     webbrowser.open(_URL, new=2)
 
@@ -54,57 +55,58 @@ def search_and_open_ldlc(content):
 def os_notification(title, text):
     _TOAST.show_toast(title, text, duration=3, icon_path="icon.ico")
 
-async def fetch(url, string_to_find="RUPTURE DE STOCK"):
-    browser = await launch(executable_path='C:/Program Files/Google/Chrome/Application/chrome.exe')
-
-    try:
-        page = await browser.newPage()
-        await page.setUserAgent(_UA)
-        await page.goto(url, timeout=10000)
-        sleep(1)
-        content = await page.evaluate('document.body.textContent', force_expr=True)
-        await browser.close()
-    except Exception as e:
-        await browser.close()
-        raise e
+async def fetch(page, string_to_find="RUPTURE DE STOCK"):
+    cookies = await page.cookies()
+    await page.deleteCookie(*cookies)
+    await page.reload(timeout=10000)
+    sleep(1)
+    content = await page.evaluate('document.body.textContent', force_expr=True)
 
     if (not '"productId":' in content):
-        return -1
+        return -1, content
 
     return content.count(string_to_find) + content.count("out_of_stock"), content
 
 async def main():
-    nb_try = 0
+    try:
+        nb_try = 0
 
-    print("watching {} gpus on url {}".format(_NB_GPU_TO_WATCH, _URL))
-    print("=================================\n")
+        print("watching {} gpus on url {}".format(_NB_GPU_TO_WATCH, _URL))
+        print("=================================\n")
 
-    while True:
-        nb_try += 1
-        print(f"try number {nb_try}")
+        browser = await launch(executable_path='C:/Program Files/Google/Chrome/Application/chrome.exe')
+        page = await browser.newPage()
+        await page.setUserAgent(_UA)
+        await page.goto(_URL, timeout=10000)
 
-        try:
-            current_oos_count, content = await fetch(_URL)
-        except Exception as e:
-            print(e)
-            continue
+        while True:
+            nb_try += 1
+            print(f"try number {nb_try}")
 
-        if (current_oos_count == -1):
-            print("fetch failed.")
-            continue
+            try:
+                current_oos_count, content = await fetch(page)
+            except Exception as e:
+                print("{}: {}".format(type(e), e))
+                continue
 
-        print(current_oos_count)
-        if current_oos_count < _NB_GPU_TO_WATCH:
-            alert(content)
-            f = open("log.txt", "wb")
-            f.write(content.encode("utf-8"))
-            f.close()
+            if (current_oos_count == -1):
+                print("fetch failed.")
+                continue
 
-        sleep(_DELAY_BETWEEN_REQUESTS)
+            print(current_oos_count)
+            if current_oos_count < _NB_GPU_TO_WATCH:
+                alert(content)
+                f = open("log.txt", "wb")
+                f.write(content.encode("utf-8"))
+                f.close()
+
+            sleep(_DELAY_BETWEEN_REQUESTS)
+    finally:
+        await browser.close()
 
 
 while True:
     try:
         coroutine = asyncio.run(main())
     except Exception as e:
-        print(e)
+        print("{}: {}".format(type(e), e))
