@@ -56,12 +56,17 @@ def os_notification(title, text):
 
 async def fetch(url, string_to_find="RUPTURE DE STOCK"):
     browser = await launch(executable_path='C:/Program Files/Google/Chrome/Application/chrome.exe')
-    page = await browser.newPage()
-    await page.setUserAgent(_UA)
-    await page.goto(url, timeout=10000)
-    sleep(1)
-    content = await page.evaluate('document.body.textContent', force_expr=True)
-    await browser.close()
+
+    try:
+        page = await browser.newPage()
+        await page.setUserAgent(_UA)
+        await page.goto(url, timeout=10000)
+        sleep(1)
+        content = await page.evaluate('document.body.textContent', force_expr=True)
+        await browser.close()
+    except Exception as e:
+        await browser.close()
+        raise e
 
     if (not '"productId":' in content):
         return -1
@@ -90,11 +95,16 @@ async def main():
 
         print(current_oos_count)
         if current_oos_count < _NB_GPU_TO_WATCH:
-            f = open("log.txt", "a")
-            f.write(content)
-            f.close()
             alert(content)
+            f = open("log.txt", "wb")
+            f.write(content.encode("utf-8"))
+            f.close()
 
         sleep(_DELAY_BETWEEN_REQUESTS)
 
-asyncio.run(main())
+
+while True:
+    try:
+        coroutine = asyncio.run(main())
+    except Exception as e:
+        print(e)
